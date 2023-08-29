@@ -1,17 +1,13 @@
 # watchlist
-Simple Stock Watchlist REST API using Spring Boot
+Simple Stock Watchlist REST API using Spring Boot.  
 
-Infos:
------
-Project built with Spring Tools Suite
-Client used to test: Postman
-Content-type supported: application/json only (for simplicity)
-API-Key: None required
+### Infos:
+- Project built with Spring Tools Suite
+- Client used to test: Postman
+- Content-type supported: application/json only (for simplicity)
+- API-Key: None required
 
-
-API endpoints:
--------------
-
+### API endpoints:
 GET:
 - /demos/api/watchlist-service/watchlist --> to get list of all securities in the watchlist
 - /demos/api/watchlist-service/watchlist/{id} --> to get a specific security using its id, where id is a security integer number
