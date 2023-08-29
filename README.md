@@ -20,8 +20,8 @@ GET:
 POST:  
  - /demos/api/watchlist-service/watchlist --> to add a security to the watchlist; body must contain instance of the security to add, in json
 
-PUT:  (Content-type = json)
- - /demos/api/watchlist-service/watchlist --> to update definition of a security; body must contain instance of the security to modify with field(s) updated value(s)
+PUT: 
+ - /demos/api/watchlist-service/watchlist --> to update definition of a security; body must contain instance of the security to modify with new value(s), in json
 
 DELETE:  
  - /demos/api/watchlist-service/watchlist/{id} --> delete security with {id} from the watchlist
