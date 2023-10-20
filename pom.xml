@@ -18,7 +18,8 @@
 		<java.version>17</java.version>
 	</properties>
 	<dependencies>
-		<!-- https://mvnrepository.com/artifact/org.apache.cxf/cxf-spring-boot-starter-jaxrs -->
+		<!--
+		https://mvnrepository.com/artifact/org.apache.cxf/cxf-spring-boot-starter-jaxrs -->
 		<dependency>
 			<groupId>org.apache.cxf</groupId>
 			<artifactId>cxf-spring-boot-starter-jaxrs</artifactId>
@@ -41,11 +42,17 @@
 			<groupId>com.fasterxml.jackson.jakarta.rs</groupId>
 			<artifactId>jackson-jakarta-rs-json-provider</artifactId>
 		</dependency>
-			<dependency>
+		<dependency>
 			<groupId>com.fasterxml.jackson.jakarta.rs</groupId>
 			<artifactId>jackson-jakarta-rs-xml-provider</artifactId>
 		</dependency>
-		
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-devtools</artifactId>
+			<scope>runtime</scope>
+			<optional>true</optional>
+		</dependency>
 	</dependencies>
 
 	<build>

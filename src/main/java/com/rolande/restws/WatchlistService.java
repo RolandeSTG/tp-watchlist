@@ -1,8 +1,6 @@
 package com.rolande.restws;
 
-import java.util.List;
-
-import com.rolande.restws.model.Security;
+import com.rolande.restws.model.Watchlist;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.Produces;
@@ -16,11 +14,10 @@ import jakarta.ws.rs.core.Response;
 
 /**
  * Defines the Watchlist Service interface, along with the API's endpoints.
+ * 
  * @author Rolande St-Gelais
  */
 
-//@Consumes("application/xml, application/json")       // {RSTG}:  We'll support only JSON for now, to keep things simple.
-//@Produces("application/xml, application/json")
 @Consumes("application/json")
 @Produces("application/json")
 
@@ -28,39 +25,48 @@ import jakarta.ws.rs.core.Response;
 
 public interface WatchlistService {
 	
-	// Get list of securities in watchlist
-	@Path("/watchlist")
-	@GET
-	List<Security> getWatchlist();
-
-	// Get a specified security by ID
-	@Path("/watchlist/{id}")
-	@GET
-	Security getSecurityById(@PathParam("id") Long id);
-
-	// Get a specified security by symbol
-	@Path("/symbol/{symbol}")
-	@GET
-	Security getSecurityBySymbol(@PathParam("symbol") String symbol);
+	//-------------------------------------------
+	// CRUD operations on watchlists
+	//-------------------------------------------
 	
-	// Add a security to watchlist
-	@Path("/watchlist")
+	// Get list of existing watchlists
+	@Path("/watchlists")
+	@GET
+	Response getWatchlists();
+
+	// Add a watchlist 
+	@Path("/watchlists")
 	@POST
-	Response addSecurity(Security security);
+	Response addWatchlist(Watchlist watchlist);
 
-	// Update a security info
-	@Path("/watchlist")
+	// Update a watchlist
+	@Path("/watchlists")
 	@PUT
-	Response updateSecurity(Security security);
+	Response updateWatchlist(Watchlist watchlist);
 
-	// Delete security by ID
-	@Path("/watchlist/{id}")
+	// Delete a watchlist
+	@Path("/watchlists/{id}")
 	@DELETE
-	Response deleteSecurityById(@PathParam("id") Long id);
+	Response deleteWatchlist(@PathParam("id") Long id);
 
-	// Delete security by symbol
-	@Path("/symbol/{symbol}")
+	//-------------------------------------------
+	// Operations on a specific watchlist
+	//-------------------------------------------
+	
+	// Get content of a watchlist
+	
+	@Path("/watchlists/{id}")
+	@GET
+	Response getWatchlist(@PathParam("id") Long id);
+	
+	// Add symbol to a watchlist
+	@Path("/watchlists/{id}/symbol/{symbol}")
+	@POST
+	Response addSecurity(@PathParam("id") Long id, @PathParam("symbol") String symbol);
+	
+	// Delete symbol from a watchlist
+	@Path("/watchlists/{id}/symbol/{symbol}")
 	@DELETE
-	Response deleteSecurityBySymbol(@PathParam("symbol") String symbol);
+	Response deleteSecurity(@PathParam("id") Long id, @PathParam("symbol") String symbol);
 
 }

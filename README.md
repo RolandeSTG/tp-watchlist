@@ -9,18 +9,18 @@ Simple Stock Watchlist REST API using Spring Boot.
 
 ### API endpoints:
 GET:
-- /demos/api/watchlist-service/watchlist --> to get list of all securities in the watchlist
-- /demos/api/watchlist-service/watchlist/{id} --> to get a specific security using its id, where id is a security integer number
-- /demos/api/watchlist-service/symbol/{symbol} --> to get a watchlist item by its symbol
+- /watchlist-service/watchlists --> to get the list of all existing watchlists
+- /watchlist-service/watchlists/{id} --> to get the content of a specific watchlist, i.e. the list of all its securities
 
 POST:  
- - /demos/api/watchlist-service/watchlist --> to add a security to the watchlist; body must contain instance of the security to add, in json
+ - /watchlist-service/watchlists --> to add a new watchlist; body must contain instance of the watchlist to add, in json
+ - /watchlist-service/watchlists/{id}/symbol/{symbol} --> to add a symbol' security to the specified watchlist
 
 PUT: 
- - /demos/api/watchlist-service/watchlist --> to update definition of a security; body must contain instance of the security to modify with new value(s), in json
+ - /watchlist-service/watchlists --> to update a watchlist; body must contain instance of the watchlist to modify with its new value(s), in json
 
 DELETE:  
- - /demos/api/watchlist-service/watchlist/{id} --> delete security with {id} from the watchlist
- - /demos/api/watchlist-service/symbol/{symbol} --> delete security with {symbol} from the watchlist
-
+ - /watchlist-service/watchlist/{id} --> to delete a specific watchlist
+ - /watchlist-service/watchlist/{id}/symbol/{symbol} --> to delete a symbol' security from the specified watchlist
+ 
    
