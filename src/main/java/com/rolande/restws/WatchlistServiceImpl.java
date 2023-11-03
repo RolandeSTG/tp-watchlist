@@ -288,10 +288,8 @@ public class WatchlistServiceImpl implements WatchlistService {
 		
 	    // If we already have a list with the same name (ignoring case), reject 'add' request
 
-		for (Watchlist w : watchlists.values()) {				
-			if (watchlist.getName().compareToIgnoreCase(w.getName()) == 0) {
-			    return Response.status(Status.CONFLICT).build();            // HTTP 409
-			}
+		if (watchlistNameExists(watchlist.getName())) {		
+		    return Response.status(Status.CONFLICT).build();            // HTTP 409
 		}
 
 		// Else, all is fine, just add new list with the name provided (we set the other properties)...
@@ -302,6 +300,23 @@ public class WatchlistServiceImpl implements WatchlistService {
 		watchlists.put(watchlist.getId(), watchlist);
 
 		return Response.ok(watchlist).build();
+	}
+	
+	/**
+	 * Determine if a watchlist with a given name exists.
+	 * 
+	 * @param name Watchlist name to verify
+	 * @return true if a watchlist with specified  name found; false otherwise.
+	 */
+	private boolean watchlistNameExists(String name) {
+		
+		for (Watchlist w : watchlists.values()) {				
+			if (name.compareToIgnoreCase(w.getName()) == 0) {
+			    return true;
+			}
+		}
+
+		return false;
 	}
 	
 	/** 
@@ -327,6 +342,14 @@ public class WatchlistServiceImpl implements WatchlistService {
 			String newName = watchlist.getName();
 			
 			if ( (newName != null) && (!newName.trim().isEmpty()) ) {
+				
+				// {IssueFix}:
+			    // If we already have a list with the same name (ignoring case), reject 'update' request
+
+				if (watchlistNameExists(watchlist.getName())) {		
+				    return Response.status(Status.CONFLICT).build();            // HTTP 409
+				}
+
 				watchlists.put(id, watchlist);                // replace old list with this one
 				
 				response = Response.accepted().build(); // HTTP 202
