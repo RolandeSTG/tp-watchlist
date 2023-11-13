@@ -27,15 +27,18 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
 import jakarta.ws.rs.InternalServerErrorException;
 
+import com.rolande.restws.model.ErrorBody;
 import com.rolande.restws.model.Quote;
 import com.rolande.restws.model.Security;
 import com.rolande.restws.model.Watchlist;
+import com.rolande.restws.configuration.Configuration;
 
 
 /**
  * Class implementing the Watchlist Service interface.
  * 
  * Note: Watchlists and Securities lists are built using static data, to keep things simple (for demo purpose).
+ *       Upon start, the service builds 3 watchlists and populates them with 5 securities each.
  * 
  * @author Rolande St-Gelais
  */
@@ -52,20 +55,24 @@ public class WatchlistServiceImpl implements WatchlistService {
 
 	@Autowired
 	private Environment environment;
+	
+	@Autowired
+	private Configuration config;
+
+	private String quoteEndpoint;      
 
 	public WatchlistServiceImpl() {
 		
 		loadSecurities();	                      	// Create a list of securities to later add to watchlists		
 		createWatchlists(); 						// Create a couple of watchlists
 		populateWatchlists(); 						// Add a few securities to each watchlist
-
+		
 	}
 	
 	/**
 	 * Initialize our securities list. Security Ids starts at 1.
 	 * 
 	 */
-
 	private void loadSecurities() {
 	
 		securities.put(++currentSecurityId, new Security(currentSecurityId, "AAPL", "Apple Inc", "Nasdaq", 
@@ -104,7 +111,6 @@ public class WatchlistServiceImpl implements WatchlistService {
 	 *  Create a few watchlists, each with different creation dates (to make it a little more interesting)...
 	 *  Watchlist IDs start at 1.
 	 */
-	
 	private void createWatchlists() {
 
 		Calendar cal = Calendar.getInstance();
@@ -121,7 +127,7 @@ public class WatchlistServiceImpl implements WatchlistService {
 	}
 		
 	/**
-	 *  Attach randomly a given number of securities to each watchlist...
+	 *  Populate the watchlists by attaching randomly 5 securities to each...
 	 */
 	private void populateWatchlists() {
 		
@@ -133,7 +139,7 @@ public class WatchlistServiceImpl implements WatchlistService {
 			List<Security> secList = new ArrayList<Security>();
 
 			int count = 0;			
-			while (count < 5) {
+			while (count < 5) {     
 				long randomNumber = min + (long) (Math.random() * range);
 
 				if (!secList.contains(securities.get(randomNumber))) {
@@ -161,7 +167,6 @@ public class WatchlistServiceImpl implements WatchlistService {
 		}
 		
 		System.out.println("watchlists = " + watchlists);
-		
 	}
 	
 	/**
@@ -176,18 +181,17 @@ public class WatchlistServiceImpl implements WatchlistService {
 
 		System.out.println("GET: getWatchlists()");
 
-		ObjectMapper mapper = new ObjectMapper();
-		mapper.enable(SerializationFeature.WRAP_ROOT_VALUE);
-
-		SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
-		df.setTimeZone(TimeZone.getTimeZone("UTC"));
-		mapper.setDateFormat(df);
-
-		// we wrap the list using 'watchlists', so that response starts with a single object 
 		try {
+			ObjectMapper mapper = new ObjectMapper();
+			mapper.enable(SerializationFeature.WRAP_ROOT_VALUE);
+
+			SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");	
+			df.setTimeZone(TimeZone.getTimeZone("UTC"));
+			mapper.setDateFormat(df);
+
 			return Response.ok(mapper.writer().withRootName("watchlists").writeValueAsString(watchlists.values())).build();
 		} 
-		catch (JsonProcessingException | IllegalArgumentException e) {								
+		catch (JsonProcessingException | IllegalArgumentException | NullPointerException e) {								
 			throw new InternalServerErrorException(e.getMessage());                 // HTTP 500
 		}
 
@@ -208,11 +212,9 @@ public class WatchlistServiceImpl implements WatchlistService {
 		Watchlist watchlist = watchlists.get(id);
 
 		if (watchlist == null) {
-			String errorMsg = "Watchlist does NOT exist (id=" + id + ")";
-
-			throw new ResponseStatusException(HttpStatus.NOT_FOUND, errorMsg, null);
+			return errorBodyResponse(Status.NOT_FOUND, "Watchlist (" + id + ") does not exist"); 	// HTTP 404
 		}
-		
+			
 		List<Security> secList = watchlistSecurities.get(watchlist.getId());
 
 		// Get the latest quote for each security...
@@ -237,6 +239,23 @@ public class WatchlistServiceImpl implements WatchlistService {
 	}
 	
 	/**
+	 * Return a response that includes the error message in the body. 
+	 * Error message will be prefixed with double stars and space (i.e. '** ').
+	 * 
+	 * @param code  Http Status code, as defined by (jakarta's) enum Response.Status
+	 * @param errorMsg Error message to include in the body
+	 * @return an HTTP Response with an error body
+	 */
+	private Response errorBodyResponse(Status code, String errorMsg) {
+		
+		ErrorBody errorBody = new ErrorBody("** " + errorMsg);
+		
+		System.out.println(".. Error = [" + errorBody.getMessage() + "]");		
+		
+		return Response.status(code).entity(errorBody).build();    
+	}
+
+	/**
 	 * Fetch the latest quote for a given security's symbol from the Quote microservice.  If not running at the time of request, 
 	 * the quote returned will be empty. 
 	 * 
@@ -245,20 +264,23 @@ public class WatchlistServiceImpl implements WatchlistService {
 	 * 
 	 * Note: For the time being, the Quote Microservice runs on port 8500. 
 	 */
-
 	private Quote fetchRemoteQuote(String symbol) {
+		
+		// get the Quote Service's endpoint to get a quote, if not already set...
+		if (this.quoteEndpoint == null) this.quoteEndpoint = getQuoteServiceEndpoint();
+
 		Quote quote;
 		
 		HashMap<String, String> uriVariables = new HashMap<>();
 
 		// http://localhost:8500/quote/TSLA
-
+		
 		uriVariables.put("symbol", symbol);
-
+		
 		try {
 			ResponseEntity<Quote> responseEntity = new RestTemplate()
-					.getForEntity("http://localhost:8500/quote/{symbol}", Quote.class, uriVariables);
-
+					.getForEntity(this.quoteEndpoint, Quote.class, uriVariables);
+			
 			quote = responseEntity.getBody();
 			quote.setEnvironment(quote.getEnvironment() + " REST Template");
 		}
@@ -269,6 +291,42 @@ public class WatchlistServiceImpl implements WatchlistService {
 		return quote;
 	}
 	
+	/**
+	 * Get the Quote Service's endpoint to get a quote, by obtaining the service's base URL in
+	 * the application.properties file and adding proper endpoint suffix.
+	 * 
+	 * @return Quote's service endpoint to get a quote
+	 */
+	private String getQuoteServiceEndpoint() {
+		String endpoint;
+		String baseUrl;
+
+		String getQuoteEndpoint = "quote/{symbol}";
+
+		String quoteServiceBaseUrl = config.getQuoteBaseUrl();
+
+		if (quoteServiceBaseUrl != null) {	
+			// if url ends with a slash, keep it
+			if (quoteServiceBaseUrl.endsWith("/")) {
+				baseUrl = quoteServiceBaseUrl;
+			}
+			else { // otherwise, add one
+				baseUrl = quoteServiceBaseUrl + "/";
+			}
+			
+		}
+		else { // quote-base-url property not defined, set default base url...
+			baseUrl = "http://localhost:8500/";
+		}
+			
+		endpoint = baseUrl + getQuoteEndpoint;
+		
+		System.out.println("... GetQuote Service Endpoint = " + endpoint);
+		
+		return endpoint;
+	}
+		
+
 	/**
 	 * Add a watchlist to the list of existing watchlists.
 	 * 
@@ -283,13 +341,15 @@ public class WatchlistServiceImpl implements WatchlistService {
 		System.out.println("POST: addWatchlist("+ watchlist + ")");
 	
 		if ( (watchlist.getName() == null) || (watchlist.getName().trim().isEmpty()) ) {
-			return Response.status(Status.NOT_ACCEPTABLE).build();              // HTTP 406
+			return errorBodyResponse(Status.NOT_ACCEPTABLE, "Watchlist name cannot be blank"); 				// HTTP 406
 		}
 		
 	    // If we already have a list with the same name (ignoring case), reject 'add' request
 
-		if (watchlistNameExists(watchlist.getName())) {		
-		    return Response.status(Status.CONFLICT).build();            // HTTP 409
+		watchlist.setName(watchlist.getName().trim());        // normalize name before next check
+		
+		if (watchlistNameExists(watchlist.getName())) {	
+			return errorBodyResponse(Status.CONFLICT, "Name (" + watchlist.getName() + ") already used"); 	// HTTP 409
 		}
 
 		// Else, all is fine, just add new list with the name provided (we set the other properties)...
@@ -298,6 +358,8 @@ public class WatchlistServiceImpl implements WatchlistService {
 		watchlist.setDateCreated(new Date());
 
 		watchlists.put(watchlist.getId(), watchlist);
+
+		System.out.println("... List(" + watchlist.getId() + "," + watchlist.getName() + "): Added");
 
 		return Response.ok(watchlist).build();
 	}
@@ -325,51 +387,39 @@ public class WatchlistServiceImpl implements WatchlistService {
 	 * @param watchlist Watchlist object to be modified
 	 * @return HTTP response code, whether the request was accepted or rejected
 	 */
-
 	@Override
 	public Response updateWatchlist(Watchlist watchlist) {
 
 		System.out.println("PUT: updateWatchlist(" + watchlist + ")");
 
-		Response response;
-	
 		Long id = watchlist.getId();
 	
 		Watchlist oldWatchlist = watchlists.get(id);
 		
-		if (oldWatchlist != null) {
+		if (oldWatchlist == null) {
+			return errorBodyResponse(Status.NOT_FOUND, "Watchlist (" + id + ") does not exist"); 	// HTTP 404
+		}	
 			
-			String newName = watchlist.getName();
-			
-			if ( (newName != null) && (!newName.trim().isEmpty()) ) {
-				
-				// {IssueFix}:
-			    // If we already have a list with the same name (ignoring case), reject 'update' request
-
-				if (watchlistNameExists(watchlist.getName())) {		
-				    return Response.status(Status.CONFLICT).build();            // HTTP 409
-				}
-
-				watchlists.put(id, watchlist);                // replace old list with this one
-				
-				response = Response.accepted().build(); // HTTP 202
-				
-				System.out.println("...List (" + oldWatchlist.getName() + "): Renamed to (" + watchlist.getName() + ")");
-			}
-			else {
-				System.out.println("..." +  "Not modified: Improper name (" + watchlist.getName() + ")");
-			
-				response = Response.notModified().build(); // HTTP 304		
-			}		
-		} 
-		else {
-			System.out.println("... (not found)");
-			
-			response = Response.status(Status.NOT_FOUND).build(); // HTTP 404
+		String newName = watchlist.getName();
+		
+		if ( (newName == null) || (newName.trim().isEmpty()) ) {
+			return errorBodyResponse(Status.NOT_ACCEPTABLE, "Improper new name (" + watchlist.getName() + ") -- Not modified"); 	// HTTP 406			
 		}
 		
-		return response;
+		newName = newName.trim();
 		
+		// {IssueFix}:
+	    // If new & old names are not the same AND another list already uses the new name (ignoring case), reject 'update' request
+		
+		if ( (oldWatchlist.getName().compareToIgnoreCase(newName) != 0) && (watchlistNameExists(newName)) ) {	
+			return errorBodyResponse(Status.CONFLICT, "Name (" + newName + ") already used -- Not modified"); 	// HTTP 409
+		}
+
+		System.out.println("... List (" + oldWatchlist.getName() + "): Renamed to (" + newName + ")");
+		
+		oldWatchlist.setName(newName);  			   // simply save trimmed name to existing object
+		
+		return Response.accepted().build(); // HTTP 202	
 	}
 
 	/**
@@ -379,29 +429,21 @@ public class WatchlistServiceImpl implements WatchlistService {
 	 * @return HTTP response code, corresponding to whether the request succeeded or not.
 	 * 
 	 */
-
 	@Override
 	public Response deleteWatchlist(Long id) {
 
 		System.out.println("DELETE: deleteWatchlist(id=" + id + ")");
-
-		Response response;
 	
-		if (watchlists.get(id) != null) {
-			System.out.println("..." + watchlists.get(id).getName() + ": Deleted (ok)");
-
-			watchlistSecurities.remove(id);       // remove its security list
-			watchlists.remove(id);                // remove list from actual watchlists
-							
-			response = Response.ok().build();
-		} else {	
-			System.out.println("... (not found)");
-			
-			response = Response.status(Status.NOT_FOUND).build(); // HTTP 404
+		if (watchlists.get(id) == null) {
+			return errorBodyResponse(Status.NOT_FOUND, "Watchlist (" + id + ") does not exist"); 	// HTTP 404
 		}
-
-		return response;
 		
+		System.out.println("... List (" + watchlists.get(id).getName() + "): Deleted (ok)");
+
+		watchlistSecurities.remove(id);       // remove its security list
+		watchlists.remove(id);                // remove list from actual watchlists
+						
+		return Response.ok().build();		
 	}
 	
 	/**
@@ -411,23 +453,19 @@ public class WatchlistServiceImpl implements WatchlistService {
 	 * @param symbol Symbol of the security sought.
 	 * @return the security object of the symbol, if valid and found; HTTP failure response code otherwise.
 	 */
-
 	@Override
 	public Response addSecurity(Long id, String symbol) {
-
+		
 		System.out.println("POST: addSecurity(watchlistID=" + id + ", symbol=" + symbol + ")");
 
 		Watchlist watchlist = watchlists.get(id);
 		
 		if (watchlist == null) {
-			System.out.println("** Watchlist NOT found");
-		
-			return Response.status(Status.NOT_FOUND.getStatusCode(), "Watchlist (" + id + ") NOT found").build();          // 404 - Watchlist not found
+			return errorBodyResponse(Status.NOT_FOUND, "Watchlist (" + id + ") does not exist"); 	// HTTP 404
 		}
 		
 		if ( (symbol == null) || (symbol.trim().isEmpty()) ) {
-			System.out.println("** Invalid Symbol");
-			return Response.status(Status.NOT_ACCEPTABLE.getStatusCode(), "Invalid symbol").build();     // 406 - Unacceptable symbol
+			return errorBodyResponse(Status.NOT_ACCEPTABLE, "Invalid Symbol");						// HTTP 406
 		}
 		
 		symbol = symbol.trim();     // normalize symbol by removing all leading/trailing spaces, before doing next checks 
@@ -435,15 +473,14 @@ public class WatchlistServiceImpl implements WatchlistService {
 		Long secId = symbolsIdx.get(symbol.toUpperCase());            // find corresponding security using its symbol
 			
 		if (secId == null) {
-			System.out.println("** Symbol undefined");
-			return Response.status(Status.NOT_FOUND.getStatusCode(), "Symbol undefined").build();          // 404 - Symbol not associated with any security
+			return errorBodyResponse(Status.NOT_FOUND, "Undefined symbol (" + symbol + ")");		// HTTP 404
 		}
 
 		Security security = securities.get(secId);                     // fetch security matching symbol
 	
 		List<Security> secList = watchlistSecurities.get(id);      // get watchlist's list of securities
 		
-		if (secList == null) {      // no securities attached yet to watchlist, create list
+		if (secList == null) {      // no securities attached to watchlist yet, create list
 			System.out.println(".. Symbol added to new security list");
 
             secList = new ArrayList<Security>();		
@@ -454,16 +491,13 @@ public class WatchlistServiceImpl implements WatchlistService {
 		else {
 			// verify that symbol is not already in the list...
 			if (secList.contains(security)) {
-				System.out.println("** Symbol already in list -- Add Request rejected");
-				
-				return Response.status(HttpStatus.FORBIDDEN.value(), "Symbol (" + symbol + ") already in list -- Not added").build(); // HTTP 403 -- Symbol already in list, rejected
+				return errorBodyResponse(Status.FORBIDDEN, "Symbol (" + symbol + ") already in list");	// HTTP 403
 			}
 			else {
 				System.out.println("..Symbol added to existing security list");
 
 				secList.add(security);
-			}
-				
+			}			
 		}
 		
 		security.setQuote(fetchRemoteQuote(symbol));   // Get latest quote for this security/symbol
@@ -472,7 +506,7 @@ public class WatchlistServiceImpl implements WatchlistService {
 					
 		return Response.ok(security).build();
 	}
-
+	
 	/**
 	 * Delete a symbol' security from the specified watchlist
 	 * 
@@ -480,7 +514,6 @@ public class WatchlistServiceImpl implements WatchlistService {
 	 * @param symbol Symbol of the security to remove.
 	 * @return the resulting HTTP response code, whether the request was successful or not.
 	 */
-	
 	@Override
 	public Response deleteSecurity(Long id, String symbol) {
 		
@@ -489,13 +522,11 @@ public class WatchlistServiceImpl implements WatchlistService {
 		Watchlist watchlist = watchlists.get(id);
 		
 		if (watchlist == null) {
-			System.out.println("** Watchlist NOT found");
-			return Response.status(Status.NOT_FOUND.getStatusCode(), "Watchlist (" + id + ") NOT found").build();          // 404 - Watchlist not found
+			return errorBodyResponse(Status.NOT_FOUND, "Watchlist (" + id + ") does not exist"); 	// HTTP 404
 		}
 		
 		if ( (symbol == null) || (symbol.trim().isEmpty()) ) {
-			System.out.println("** Invalid Symbol");
-			return Response.status(Status.NOT_ACCEPTABLE.getStatusCode(), "Invalid symbol").build();     // 406 - Unacceptable symbol
+			return errorBodyResponse(Status.NOT_ACCEPTABLE, "Invalid Symbol");						// HTTP 406
 		}
 		
 		symbol = symbol.trim();     // normalize symbol by removing all leading/trailing spaces, before doing next checks 
@@ -503,8 +534,7 @@ public class WatchlistServiceImpl implements WatchlistService {
 		Long secId = symbolsIdx.get(symbol.toUpperCase());            // find corresponding security using its symbol
 			
 		if (secId == null) {
-			System.out.println("** Symbol undefined");
-			return Response.status(Status.NOT_FOUND.getStatusCode(), "Symbol NOT found").build();          // 404 - Symbol not associated with any security
+			return errorBodyResponse(Status.NOT_FOUND, "Undefined symbol (" + symbol + ")");		// HTTP 404
 		}
 
 		Security security = securities.get(secId);                     // fetch security matching symbol
@@ -512,8 +542,7 @@ public class WatchlistServiceImpl implements WatchlistService {
 		List<Security> secList = watchlistSecurities.get(id);      // get watchlist's list of securities
 		
 		if ( (secList == null) || (! secList.contains(security)) ) {
-			System.out.println("** Symbol NOT found in watchlist");
-			return Response.status(Status.NOT_FOUND.getStatusCode(), "Symbol NOT found").build();  // HTTP 404
+			return errorBodyResponse(Status.NOT_FOUND, "Symbol (" + symbol + ") not in watchlist");	// HTTP 404
 		}
 		
 		System.out.println(".. Symbol found in watchlist -- Deleted");
